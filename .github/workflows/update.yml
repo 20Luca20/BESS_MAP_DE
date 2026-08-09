@@ -1,0 +1,46 @@
+name: Update BESS dataset
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"  # every Monday 05:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python scripts/build_dataset.py
+
+      - name: Commit updated data
+        run: |
+          git config user.name "bess-map-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/bess_de.geojson data/bess_de.csv
+          git diff --quiet --cached || git commit -m "Weekly MaStR data update ($(date -u +%Y-%m-%d))"
+          git push
+
+  deploy-pages:
+    needs: update-data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - uses: actions/deploy-pages@v4

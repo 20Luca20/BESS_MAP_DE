@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BESS Map DE – Batteriespeicher-Pipeline Deutschland</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { height: 100vh; width: 100vw; }
+  .legend { background: white; padding: 8px 12px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.5; }
+  .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  #meta { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 6px 12px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="meta">BESS Map DE — lädt…</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([51.2, 10.4], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const statusColor = (status) => {
+  if (!status) return '#888';
+  const s = status.toLowerCase();
+  if (s.includes('betrieb')) return '#2e7d32';
+  if (s.includes('planung')) return '#f9a825';
+  if (s.includes('genehmigt')) return '#1565c0';
+  if (s.includes('stillgelegt') || s.includes('vorübergehend')) return '#c62828';
+  return '#888';
+};
+
+const radiusForPower = (kw) => {
+  const mw = (kw || 0) / 1000;
+  return Math.max(4, Math.min(30, Math.sqrt(mw) * 6));
+};
+
+fetch('data/bess_de.geojson')
+  .then(r => r.json())
+  .then(data => {
+    const layer = L.geoJSON(data, {
+      pointToLayer: (feature, latlng) => {
+        const p = feature.properties;
+        return L.circleMarker(latlng, {
+          radius: radiusForPower(parseFloat(p.Bruttoleistung)),
+          fillColor: statusColor(p.EinheitBetriebsstatus),
+          color: '#333',
+          weight: 1,
+          fillOpacity: 0.75
+        });
+      },
+      onEachFeature: (feature, lyr) => {
+        const p = feature.properties;
+        const mw = p.Bruttoleistung ? (parseFloat(p.Bruttoleistung) / 1000).toFixed(1) : '?';
+        const mwh = p.NutzbareSpeicherkapazitaet_kWh ? (parseFloat(p.NutzbareSpeicherkapazitaet_kWh) / 1000).toFixed(1) : '?';
+        lyr.bindPopup(`
+          <b>${p.NameStromerzeugungseinheit || 'Unbenannt'}</b><br>
+          ${p.Ort || ''}, ${p.Bundesland || ''}<br>
+          Status: ${p.EinheitBetriebsstatus || '?'}<br>
+          Leistung: ${mw} MW &nbsp; Kapazität: ${mwh} MWh<br>
+          Inbetriebnahme: ${p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? 'geplant ' + p.GeplantesInbetriebnahmedatum : '?')}<br>
+          <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
+        `);
+      }
+    }).addTo(map);
+    document.getElementById('meta').innerText = `BESS Map DE — ${data.features.length} Standorte`;
+  })
+  .catch(err => {
+    document.getElementById('meta').innerText = 'Fehler beim Laden der Daten: ' + err;
+  });
+
+const legend = L.control({position: 'bottomright'});
+legend.onAdd = () => {
+  const div = L.DomUtil.create('div', 'legend');
+  div.innerHTML = `
+    <b>Status</b><br>
+    <span style="background:#2e7d32"></span>In Betrieb<br>
+    <span style="background:#1565c0"></span>Genehmigt<br>
+    <span style="background:#f9a825"></span>In Planung<br>
+    <span style="background:#c62828"></span>Stillgelegt<br>
+    <span style="background:#888"></span>Sonstiges
+  `;
+  return div;
+};
+legend.addTo(map);
+</script>
+</body>
+</html>
