@@ -123,11 +123,27 @@
     background: var(--panel-solid); border-left: 1px solid var(--border);
     padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
   }
-  #graphPane .graph-header { display: flex; align-items: center; justify-content: space-between; }
+  #graphPane .graph-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   #graphPane h2 { font-size: 13px; font-weight: 700; margin: 0; }
   .chart-wrap { position: relative; height: 320px; }
   .chart-legend-note { font-size: 11px; color: var(--text-muted); line-height: 1.6; background: #F5F5F7; border-radius: 10px; padding: 10px 12px; }
   .chart-legend-note b { color: var(--text); }
+
+  .table-view { flex-direction: column; flex: 1; min-height: 0; } /* display itself is toggled inline by JS */
+  .table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table.site-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  table.site-table thead th {
+    position: sticky; top: 0; background: #F5F5F7; text-align: left; padding: 8px 9px;
+    font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; white-space: nowrap;
+    border-bottom: 1px solid var(--border); z-index: 1;
+  }
+  table.site-table thead th:hover { color: var(--text); }
+  table.site-table thead th .arrow { font-size: 9px; margin-left: 3px; opacity: 0.6; }
+  table.site-table tbody td { padding: 7px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.site-table tbody tr { cursor: pointer; }
+  table.site-table tbody tr:hover { background: #F5F5F7; }
+  table.site-table .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .table-empty { padding: 24px 12px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
 
   .legend { background: var(--panel-solid); padding: 10px 13px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); font-size: 12.5px; line-height: 1.75; border: 1px solid var(--border); }
   .legend b { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
@@ -215,14 +231,36 @@
 
     <div id="graphPane">
       <div class="graph-header">
-        <h2 data-i18n="chartTitle">Verlauf</h2>
+        <div class="segmented" id="paneTabSeg" style="width: 160px;">
+          <button data-tab="chart" class="active" data-i18n="tabChart">Verlauf</button>
+          <button data-tab="table" data-i18n="tabTable">Liste</button>
+        </div>
         <div class="segmented" id="unitSeg" style="width: 140px;">
           <button data-unit="mw" class="active">MW</button>
           <button data-unit="mwh">MWh</button>
         </div>
       </div>
-      <div class="chart-wrap"><canvas id="chart"></canvas></div>
-      <div class="chart-legend-note" id="chartFootnote"></div>
+
+      <div id="chartView">
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        <div class="chart-legend-note" id="chartFootnote"></div>
+      </div>
+
+      <div id="tableView" class="table-view" style="display:none;">
+        <div class="table-wrap">
+          <table class="site-table" id="siteTable">
+            <thead><tr>
+              <th data-sort="name"><span data-i18n="colName">Name</span><span class="arrow"></span></th>
+              <th data-sort="status"><span data-i18n="colStatus">Status</span><span class="arrow"></span></th>
+              <th data-sort="bundesland"><span data-i18n="colBundesland">Bundesland</span><span class="arrow"></span></th>
+              <th data-sort="mw"><span>MW</span><span class="arrow"></span></th>
+              <th data-sort="mwh"><span>MWh</span><span class="arrow"></span></th>
+              <th data-sort="date"><span data-i18n="colDate">Datum</span><span class="arrow"></span></th>
+            </tr></thead>
+            <tbody id="siteTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -253,6 +291,9 @@ const I18N = {
     statusBetrieb: 'In Betrieb', statusGenehmigt: 'Genehmigt', statusPlanung: 'In Planung', statusStillgelegt: 'Stillgelegt', statusSonst: 'Sonstiges',
     popupStatus: 'Status', popupPower: 'Leistung', popupCapacity: 'Kapazität', popupCommission: 'Inbetriebnahme', popupPlannedPrefix: 'geplant',
     unnamed: 'Unbenannt',
+    tabChart: 'Verlauf', tabTable: 'Liste',
+    colName: 'Name', colStatus: 'Status', colBundesland: 'Bundesland', colDate: 'Datum',
+    tableEmpty: 'Keine Standorte für die aktuelle Filterauswahl.',
   },
   en: {
     pageTitle: 'BESS Map DE – German Battery Storage Pipeline',
@@ -275,6 +316,9 @@ const I18N = {
     statusBetrieb: 'In Operation', statusGenehmigt: 'Approved', statusPlanung: 'In Planning', statusStillgelegt: 'Decommissioned', statusSonst: 'Other',
     popupStatus: 'Status', popupPower: 'Power', popupCapacity: 'Capacity', popupCommission: 'Commissioned', popupPlannedPrefix: 'planned',
     unnamed: 'Unnamed',
+    tabChart: 'Timeline', tabTable: 'List',
+    colName: 'Name', colStatus: 'Status', colBundesland: 'State', colDate: 'Date',
+    tableEmpty: 'No sites match the current filters.',
   },
 };
 const BUNDESLAND_EN = {
@@ -315,6 +359,7 @@ const BUCKETS = [
 const UTILITY_THRESHOLD_MW = 1;
 const CHART_MIN_YEAR = 2010;
 const CURRENT_YEAR = new Date().getFullYear();
+const STATUS_ORDER = ['betrieb', 'genehmigt', 'planung', 'stillgelegt', 'sonst'];
 
 // Apple system-color inspired palette
 const STATUS_COLORS = {
@@ -337,10 +382,12 @@ function bucketFor(mw) { const b = BUCKETS.find(b => b.test(mw)); return b ? b.k
 // ============================================================
 const state = {
   search: '', category: 'utility', buckets: new Set(BUCKETS.map(b => b.key)),
-  bundesland: 'Alle', lang: 'de', chartUnit: 'mw',
+  bundesland: 'Alle', lang: 'de', chartUnit: 'mw', paneTab: 'chart',
+  sortKey: 'mw', sortDir: 'desc',
 };
 let allFeatures = [], markerLayer = null, bundeslaenderLayer = null, chart = null;
 let lastMwSeries = null, lastMwhSeries = null;
+let markersByMastrNr = {};
 
 // ============================================================
 // Map setup
@@ -417,6 +464,46 @@ document.getElementById('unitSeg').addEventListener('click', e => {
   document.querySelectorAll('#unitSeg button').forEach(b => b.classList.toggle('active', b === btn));
   applyChartUnit();
 });
+
+// ============================================================
+// Chart / Table pane tab toggle
+// ============================================================
+document.getElementById('paneTabSeg').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  state.paneTab = btn.dataset.tab;
+  document.querySelectorAll('#paneTabSeg button').forEach(b => b.classList.toggle('active', b === btn));
+  const isChart = state.paneTab === 'chart';
+  document.getElementById('chartView').style.display = isChart ? '' : 'none';
+  document.getElementById('tableView').style.display = isChart ? 'none' : 'flex';
+  document.getElementById('unitSeg').style.visibility = isChart ? 'visible' : 'hidden';
+  if (isChart && chart) chart.resize();
+});
+
+// ============================================================
+// Sortable table
+// ============================================================
+const TEXT_SORT_KEYS = new Set(['name', 'bundesland']);
+document.getElementById('siteTable').querySelector('thead').addEventListener('click', e => {
+  const th = e.target.closest('th');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (state.sortKey === key) {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortKey = key;
+    state.sortDir = (key === 'status') ? 'asc' : (TEXT_SORT_KEYS.has(key) ? 'asc' : 'desc');
+  }
+  renderSortArrows();
+  renderTable(allFeatures.filter(matchesFilters));
+});
+function renderSortArrows() {
+  document.querySelectorAll('#siteTable thead th').forEach(th => {
+    const arrow = th.querySelector('.arrow');
+    if (th.dataset.sort === state.sortKey) arrow.textContent = state.sortDir === 'asc' ? '▲' : '▼';
+    else arrow.textContent = '';
+  });
+}
 
 // ============================================================
 // Search / reset / mobile menu
@@ -497,32 +584,39 @@ function refresh() {
   drawMarkers(filtered);
   drawStats(filtered);
   drawCharts(filtered);
+  renderTable(filtered);
   highlightBundesland();
 }
 
 // ============================================================
 // Markers
 // ============================================================
+function popupHtml(feature) {
+  const p = feature.properties;
+  const mw = feature._mw.toFixed(1);
+  const mwh = feature._mwh != null ? feature._mwh.toFixed(1) : '?';
+  const commission = p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? `${t('popupPlannedPrefix')} ${p.GeplantesInbetriebnahmedatum}` : '?');
+  return `
+    <b>${p.NameStromerzeugungseinheit || t('unnamed')}</b><br>
+    ${p.Ort || ''}, ${trBundesland(p.Bundesland) || ''}<br>
+    ${t('popupStatus')}: ${trStatus(p.EinheitBetriebsstatus)}<br>
+    ${t('popupPower')}: ${mw} MW &nbsp; ${t('popupCapacity')}: ${mwh} MWh<br>
+    ${t('popupCommission')}: ${commission}<br>
+    <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
+  `;
+}
 function drawMarkers(filtered) {
   if (markerLayer) map.removeLayer(markerLayer);
+  markersByMastrNr = {};
   markerLayer = L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
     pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
       radius: radiusForPower(feature._mw), fillColor: STATUS_COLORS[statusKey(feature.properties.EinheitBetriebsstatus)],
       color: 'rgba(0,0,0,0.35)', weight: 1, fillOpacity: 0.85,
     }),
     onEachFeature: (feature, lyr) => {
-      const p = feature.properties;
-      const mw = feature._mw.toFixed(1);
-      const mwh = feature._mwh != null ? feature._mwh.toFixed(1) : '?';
-      const commission = p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? `${t('popupPlannedPrefix')} ${p.GeplantesInbetriebnahmedatum}` : '?');
-      lyr.bindPopup(`
-        <b>${p.NameStromerzeugungseinheit || t('unnamed')}</b><br>
-        ${p.Ort || ''}, ${trBundesland(p.Bundesland) || ''}<br>
-        ${t('popupStatus')}: ${trStatus(p.EinheitBetriebsstatus)}<br>
-        ${t('popupPower')}: ${mw} MW &nbsp; ${t('popupCapacity')}: ${mwh} MWh<br>
-        ${t('popupCommission')}: ${commission}<br>
-        <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
-      `);
+      lyr.bindPopup(popupHtml(feature));
+      const id = feature.properties.EinheitMastrNummer;
+      if (id) markersByMastrNr[id] = lyr;
     }
   }).addTo(map);
 }
@@ -543,6 +637,54 @@ function drawStats(filtered) {
   document.getElementById('statMWh').textContent = mwh.toLocaleString(loc, { maximumFractionDigits: 0 });
   document.getElementById('statPlanned').textContent = plannedMW.toLocaleString(loc, { maximumFractionDigits: 0 });
 }
+
+// ============================================================
+// Sortable table
+// ============================================================
+function effectiveDate(p) { return p.Inbetriebnahmedatum || p.GeplantesInbetriebnahmedatum || ''; }
+function tableComparator(key) {
+  switch (key) {
+    case 'name': return (a, b) => (a.properties.NameStromerzeugungseinheit || '').localeCompare(b.properties.NameStromerzeugungseinheit || '', 'de');
+    case 'bundesland': return (a, b) => trBundesland(a.properties.Bundesland || '').localeCompare(trBundesland(b.properties.Bundesland || ''), state.lang);
+    case 'status': return (a, b) => STATUS_ORDER.indexOf(statusKey(a.properties.EinheitBetriebsstatus)) - STATUS_ORDER.indexOf(statusKey(b.properties.EinheitBetriebsstatus));
+    case 'mw': return (a, b) => a._mw - b._mw;
+    case 'mwh': return (a, b) => (a._mwh || 0) - (b._mwh || 0);
+    case 'date': return (a, b) => effectiveDate(a.properties).localeCompare(effectiveDate(b.properties));
+    default: return () => 0;
+  }
+}
+function renderTable(filtered) {
+  const tbody = document.getElementById('siteTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">${t('tableEmpty')}</td></tr>`;
+    return;
+  }
+  const cmp = tableComparator(state.sortKey);
+  const dir = state.sortDir === 'asc' ? 1 : -1;
+  const sorted = filtered.slice().sort((a, b) => cmp(a, b) * dir);
+  tbody.innerHTML = sorted.map(f => {
+    const p = f.properties;
+    const mwh = f._mwh != null ? f._mwh.toFixed(1) : '–';
+    const date = p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? `(${p.GeplantesInbetriebnahmedatum})` : '–');
+    return `<tr data-id="${p.EinheitMastrNummer || ''}">
+      <td>${p.NameStromerzeugungseinheit || t('unnamed')}</td>
+      <td><span class="status-dot" style="background:${STATUS_COLORS[statusKey(p.EinheitBetriebsstatus)]}"></span>${trStatus(p.EinheitBetriebsstatus)}</td>
+      <td>${trBundesland(p.Bundesland) || ''}</td>
+      <td>${f._mw.toFixed(1)}</td>
+      <td>${mwh}</td>
+      <td>${date}</td>
+    </tr>`;
+  }).join('');
+}
+document.getElementById('siteTableBody').addEventListener('click', e => {
+  const row = e.target.closest('tr');
+  if (!row || !row.dataset.id) return;
+  const lyr = markersByMastrNr[row.dataset.id];
+  if (!lyr) return;
+  map.panTo(lyr.getLatLng());
+  lyr.openPopup();
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 // ============================================================
 // Charts
@@ -690,6 +832,7 @@ Promise.all([
   applyStaticText();
   renderBucketLabels();
   renderLegend();
+  renderSortArrows();
   refresh();
 }).catch(err => {
   console.error(err);
