@@ -4,89 +4,488 @@
 <meta charset="UTF-8">
 <title>BESS Map DE – Batteriespeicher-Pipeline Deutschland</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, sans-serif; }
-  #map { height: 100vh; width: 100vw; }
-  .legend { background: white; padding: 8px 12px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.5; }
-  .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
-  #meta { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 6px 12px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; }
+  :root {
+    --accent: #0f5c73;
+    --accent-light: #12879f;
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --border: #e1e5ea;
+    --text: #1c2733;
+    --text-muted: #667180;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: 'Inter', system-ui, sans-serif; color: var(--text); background: var(--bg); }
+
+  #app { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+  header.topbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 56px; z-index: 1200;
+    background: var(--accent); color: #fff; display: flex; align-items: center;
+    padding: 0 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  header.topbar h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: 0.2px; }
+  header.topbar .sub { font-size: 12px; opacity: 0.85; margin-left: 10px; font-weight: 400; }
+  #menuToggle {
+    display: none; background: none; border: none; color: #fff; font-size: 20px;
+    margin-right: 10px; cursor: pointer;
+  }
+
+  #sidebar {
+    width: 360px; min-width: 360px; background: var(--panel); border-right: 1px solid var(--border);
+    margin-top: 56px; height: calc(100vh - 56px); overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);
+    margin: 0 0 10px 0; font-weight: 600;
+  }
+
+  input[type="text"], select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 14px; font-family: inherit; background: #fbfcfd; color: var(--text);
+  }
+  input[type="text"]:focus, select:focus { outline: none; border-color: var(--accent-light); }
+
+  .segmented { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .segmented button {
+    flex: 1; padding: 8px 4px; border: none; background: #fbfcfd; font-family: inherit;
+    font-size: 12.5px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-right: 1px solid var(--border);
+  }
+  .segmented button:last-child { border-right: none; }
+  .segmented button.active { background: var(--accent); color: #fff; }
+
+  .bucket-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .bucket-list label { font-size: 13px; display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--text); }
+  .bucket-list.disabled { opacity: 0.4; pointer-events: none; }
+  .bucket-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .bucket-actions a { font-size: 11.5px; color: var(--accent-light); cursor: pointer; text-decoration: underline; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: #f7fafb; border-radius: 8px; padding: 10px; text-align: center; }
+  .stat .val { font-size: 19px; font-weight: 700; color: var(--accent); line-height: 1.2; }
+  .stat .lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .reset-link { font-size: 12.5px; color: var(--text-muted); cursor: pointer; text-decoration: underline; margin-top: -4px; }
+
+  #map { flex: 1; margin-top: 56px; height: calc(100vh - 56px); }
+
+  .legend { background: white; padding: 10px 12px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.25); font-size: 12.5px; line-height: 1.7; }
+  .legend b { font-size: 12px; }
+  .legend span.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+
+  .leaflet-popup-content { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; line-height: 1.5; }
+  .leaflet-popup-content b { font-size: 14px; }
+
+  canvas.chart-canvas { max-height: 150px; }
+
+  @media (max-width: 860px) {
+    #menuToggle { display: inline-block; }
+    #sidebar {
+      position: fixed; left: 0; top: 56px; z-index: 1100; transform: translateX(-100%);
+      transition: transform 0.2s ease; box-shadow: 2px 0 10px rgba(0,0,0,0.2); width: 88vw; min-width: 0;
+    }
+    #sidebar.open { transform: translateX(0); }
+  }
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="meta">BESS Map DE — lädt…</div>
+<div id="app">
+  <header class="topbar">
+    <button id="menuToggle" aria-label="Filter ein/ausblenden">&#9776;</button>
+    <h1>BESS Map DE</h1>
+    <span class="sub">Batteriespeicher-Pipeline Deutschland &middot; Quelle: Marktstammdatenregister</span>
+  </header>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <aside id="sidebar">
+    <div class="card">
+      <h2>Suche</h2>
+      <input type="text" id="searchInput" placeholder="Name, Ort, Landkreis, MaStR-Nr…">
+    </div>
+
+    <div class="card">
+      <h2>Kategorie</h2>
+      <div class="segmented" id="categorySeg">
+        <button data-cat="utility" class="active">Utility-Scale<br><small>&ge; 1 MW</small></button>
+        <button data-cat="klein">Klein / C&amp;I<br><small>&lt; 1 MW</small></button>
+        <button data-cat="alle">Alle</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Grössenklasse (Utility-Scale)</h2>
+      <div class="bucket-list" id="bucketList"></div>
+      <div class="bucket-actions">
+        <a id="bucketAll">Alle</a>
+        <a id="bucketNone">Keine</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bundesland</h2>
+      <select id="bundeslandSelect">
+        <option value="Alle">Alle Bundesländer</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>Kennzahlen (aktueller Filter)</h2>
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statCount">–</div><div class="lbl">Standorte</div></div>
+        <div class="stat"><div class="val" id="statMW">–</div><div class="lbl">MW installiert</div></div>
+        <div class="stat"><div class="val" id="statMWh">–</div><div class="lbl">MWh installiert</div></div>
+        <div class="stat"><div class="val" id="statPlanned">–</div><div class="lbl">MW in Planung</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Verlauf: installierte Leistung (MW)</h2>
+      <canvas id="chartMW" class="chart-canvas"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Verlauf: installierte Kapazität (MWh)</h2>
+      <canvas id="chartMWh" class="chart-canvas"></canvas>
+    </div>
+
+    <div class="reset-link" id="resetFilters">Alle Filter zurücksetzen</div>
+  </aside>
+
+  <div id="map"></div>
+</div>
+
 <script>
-const map = L.map('map').setView([51.2, 10.4], 6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
+// ---------- Konstanten ----------
+const BUCKETS = [
+  { key: '<10',    label: '< 10 MW',    test: mw => mw < 10 },
+  { key: '10-25',  label: '10–25 MW',   test: mw => mw >= 10 && mw < 25 },
+  { key: '25-50',  label: '25–50 MW',   test: mw => mw >= 25 && mw < 50 },
+  { key: '50-100', label: '50–100 MW',  test: mw => mw >= 50 && mw < 100 },
+  { key: '100-200',label: '100–200 MW', test: mw => mw >= 100 && mw < 200 },
+  { key: '>200',   label: '> 200 MW',   test: mw => mw >= 200 },
+];
+// Note: buckets are rounder/cleaner than the originally sketched
+// <15/<25/<50/<100/<150/<200/>250 thresholds -- functionally similar
+// coverage, easier to reason about at a glance.
+const UTILITY_THRESHOLD_MW = 1; // >= 1 MW counts as utility-scale, matches common industry convention
+const CHART_MIN_YEAR = 2010; // MaStR contains some placeholder/garbage dates pre-2010; excluded from time series only
+
+const STATUS_COLORS = {
+  betrieb: '#2e7d32', planung: '#f9a825', genehmigt: '#1565c0', stillgelegt: '#c62828', sonst: '#888',
+};
+function statusKey(status) {
+  if (!status) return 'sonst';
+  const s = status.toLowerCase();
+  if (s.includes('betrieb') && !s.includes('vorüber')) return 'betrieb';
+  if (s.includes('planung')) return 'planung';
+  if (s.includes('genehmigt')) return 'genehmigt';
+  if (s.includes('stillgelegt') || s.includes('vorüber')) return 'stillgelegt';
+  return 'sonst';
+}
+function radiusForPower(mw) {
+  return Math.max(4, Math.min(28, Math.sqrt(Math.max(mw, 0)) * 6));
+}
+function bucketFor(mw) {
+  const b = BUCKETS.find(b => b.test(mw));
+  return b ? b.key : '>200';
+}
+
+// ---------- State ----------
+const state = {
+  search: '',
+  category: 'utility', // 'utility' | 'klein' | 'alle'
+  buckets: new Set(BUCKETS.map(b => b.key)),
+  bundesland: 'Alle',
+};
+
+let allFeatures = [];   // enriched features
+let markerLayer = null;
+let bundeslaenderLayer = null;
+let chartMW = null, chartMWh = null;
+
+// ---------- Map setup ----------
+const map = L.map('map', { minZoom: 5, maxZoom: 18 }).setView([51.2, 10.4], 6);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  subdomains: 'abcd', maxZoom: 19,
 }).addTo(map);
 
-const statusColor = (status) => {
-  if (!status) return '#888';
-  const s = status.toLowerCase();
-  if (s.includes('betrieb')) return '#2e7d32';
-  if (s.includes('planung')) return '#f9a825';
-  if (s.includes('genehmigt')) return '#1565c0';
-  if (s.includes('stillgelegt') || s.includes('vorübergehend')) return '#c62828';
-  return '#888';
-};
-
-const radiusForPower = (kw) => {
-  const mw = (kw || 0) / 1000;
-  return Math.max(4, Math.min(30, Math.sqrt(mw) * 6));
-};
-
-fetch('data/bess_de.geojson')
-  .then(r => r.json())
-  .then(data => {
-    const layer = L.geoJSON(data, {
-      pointToLayer: (feature, latlng) => {
-        const p = feature.properties;
-        return L.circleMarker(latlng, {
-          radius: radiusForPower(parseFloat(p.Bruttoleistung)),
-          fillColor: statusColor(p.EinheitBetriebsstatus),
-          color: '#333',
-          weight: 1,
-          fillOpacity: 0.75
-        });
-      },
-      onEachFeature: (feature, lyr) => {
-        const p = feature.properties;
-        const mw = p.Bruttoleistung ? (parseFloat(p.Bruttoleistung) / 1000).toFixed(1) : '?';
-        const mwh = p.NutzbareSpeicherkapazitaet_kWh ? (parseFloat(p.NutzbareSpeicherkapazitaet_kWh) / 1000).toFixed(1) : '?';
-        lyr.bindPopup(`
-          <b>${p.NameStromerzeugungseinheit || 'Unbenannt'}</b><br>
-          ${p.Ort || ''}, ${p.Bundesland || ''}<br>
-          Status: ${p.EinheitBetriebsstatus || '?'}<br>
-          Leistung: ${mw} MW &nbsp; Kapazität: ${mwh} MWh<br>
-          Inbetriebnahme: ${p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? 'geplant ' + p.GeplantesInbetriebnahmedatum : '?')}<br>
-          <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
-        `);
-      }
-    }).addTo(map);
-    document.getElementById('meta').innerText = `BESS Map DE — ${data.features.length} Standorte`;
-  })
-  .catch(err => {
-    document.getElementById('meta').innerText = 'Fehler beim Laden der Daten: ' + err;
-  });
-
-const legend = L.control({position: 'bottomright'});
+const legend = L.control({ position: 'bottomright' });
 legend.onAdd = () => {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML = `
     <b>Status</b><br>
-    <span style="background:#2e7d32"></span>In Betrieb<br>
-    <span style="background:#1565c0"></span>Genehmigt<br>
-    <span style="background:#f9a825"></span>In Planung<br>
-    <span style="background:#c62828"></span>Stillgelegt<br>
-    <span style="background:#888"></span>Sonstiges
-  `;
+    <span class="dot" style="background:${STATUS_COLORS.betrieb}"></span>In Betrieb<br>
+    <span class="dot" style="background:${STATUS_COLORS.genehmigt}"></span>Genehmigt<br>
+    <span class="dot" style="background:${STATUS_COLORS.planung}"></span>In Planung<br>
+    <span class="dot" style="background:${STATUS_COLORS.stillgelegt}"></span>Stillgelegt<br>
+    <span class="dot" style="background:${STATUS_COLORS.sonst}"></span>Sonstiges`;
   return div;
 };
 legend.addTo(map);
+
+// ---------- Build UI: bucket checkboxes ----------
+const bucketListEl = document.getElementById('bucketList');
+BUCKETS.forEach(b => {
+  const id = 'bucket-' + b.key;
+  const label = document.createElement('label');
+  label.innerHTML = `<input type="checkbox" id="${id}" checked> ${b.label}`;
+  bucketListEl.appendChild(label);
+  label.querySelector('input').addEventListener('change', e => {
+    if (e.target.checked) state.buckets.add(b.key); else state.buckets.delete(b.key);
+    refresh();
+  });
+});
+document.getElementById('bucketAll').addEventListener('click', () => {
+  state.buckets = new Set(BUCKETS.map(b => b.key));
+  bucketListEl.querySelectorAll('input').forEach(cb => cb.checked = true);
+  refresh();
+});
+document.getElementById('bucketNone').addEventListener('click', () => {
+  state.buckets = new Set();
+  bucketListEl.querySelectorAll('input').forEach(cb => cb.checked = false);
+  refresh();
+});
+
+// ---------- Category segmented control ----------
+document.getElementById('categorySeg').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  state.category = btn.dataset.cat;
+  document.querySelectorAll('#categorySeg button').forEach(b => b.classList.toggle('active', b === btn));
+  bucketListEl.classList.toggle('disabled', state.category !== 'utility');
+  refresh();
+});
+
+// ---------- Search ----------
+document.getElementById('searchInput').addEventListener('input', e => {
+  state.search = e.target.value.trim().toLowerCase();
+  refresh();
+});
+
+// ---------- Reset ----------
+document.getElementById('resetFilters').addEventListener('click', () => {
+  state.search = ''; state.category = 'utility'; state.bundesland = 'Alle';
+  state.buckets = new Set(BUCKETS.map(b => b.key));
+  document.getElementById('searchInput').value = '';
+  document.getElementById('bundeslandSelect').value = 'Alle';
+  bucketListEl.querySelectorAll('input').forEach(cb => cb.checked = true);
+  bucketListEl.classList.remove('disabled');
+  document.querySelectorAll('#categorySeg button').forEach(b => b.classList.toggle('active', b.dataset.cat === 'utility'));
+  refresh();
+});
+
+// ---------- Mobile menu ----------
+document.getElementById('menuToggle').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+// ---------- Filtering ----------
+function matchesFilters(f) {
+  const p = f.properties;
+  const mw = f._mw;
+  if (state.category === 'utility' && mw < UTILITY_THRESHOLD_MW) return false;
+  if (state.category === 'klein' && mw >= UTILITY_THRESHOLD_MW) return false;
+  if (state.category === 'utility' && !state.buckets.has(bucketFor(mw))) return false;
+  if (state.bundesland !== 'Alle' && p.Bundesland !== state.bundesland) return false;
+  if (state.search) {
+    const hay = [p.NameStromerzeugungseinheit, p.Ort, p.Landkreis, p.EinheitMastrNummer]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!hay.includes(state.search)) return false;
+  }
+  return true;
+}
+
+function refresh() {
+  const filtered = allFeatures.filter(matchesFilters);
+  drawMarkers(filtered);
+  drawStats(filtered);
+  drawCharts(filtered);
+  highlightBundesland();
+}
+
+// ---------- Markers ----------
+function drawMarkers(filtered) {
+  if (markerLayer) map.removeLayer(markerLayer);
+  markerLayer = L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
+    pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+      radius: radiusForPower(feature._mw),
+      fillColor: STATUS_COLORS[statusKey(feature.properties.EinheitBetriebsstatus)],
+      color: '#2b2b2b', weight: 1, fillOpacity: 0.78,
+    }),
+    onEachFeature: (feature, lyr) => {
+      const p = feature.properties;
+      const mw = feature._mw.toFixed(1);
+      const mwh = feature._mwh != null ? feature._mwh.toFixed(1) : '?';
+      lyr.bindPopup(`
+        <b>${p.NameStromerzeugungseinheit || 'Unbenannt'}</b><br>
+        ${p.Ort || ''}, ${p.Bundesland || ''}<br>
+        Status: ${p.EinheitBetriebsstatus || '?'}<br>
+        Leistung: ${mw} MW &nbsp; Kapazität: ${mwh} MWh<br>
+        Inbetriebnahme: ${p.Inbetriebnahmedatum || (p.GeplantesInbetriebnahmedatum ? 'geplant ' + p.GeplantesInbetriebnahmedatum : '?')}<br>
+        <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
+      `);
+    }
+  }).addTo(map);
+}
+
+// ---------- Stats ----------
+function drawStats(filtered) {
+  let count = filtered.length, mw = 0, mwh = 0, plannedMW = 0;
+  filtered.forEach(f => {
+    const key = statusKey(f.properties.EinheitBetriebsstatus);
+    if (key === 'betrieb') {
+      mw += f._mw;
+      mwh += f._mwh || 0;
+    } else if (key === 'planung' || key === 'genehmigt') {
+      plannedMW += f._mw;
+    }
+  });
+  document.getElementById('statCount').textContent = count.toLocaleString('de-DE');
+  document.getElementById('statMW').textContent = mw.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  document.getElementById('statMWh').textContent = mwh.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  document.getElementById('statPlanned').textContent = plannedMW.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+}
+
+// ---------- Charts ----------
+function buildCumulativeSeries(filtered, valueKey) {
+  const builtByYear = {};
+  const pipelineByYear = {};
+  filtered.forEach(f => {
+    const p = f.properties;
+    const key = statusKey(p.EinheitBetriebsstatus);
+    const val = valueKey === 'mw' ? f._mw : (f._mwh || 0);
+    const builtYear = yearOf(p.Inbetriebnahmedatum);
+    if (key === 'betrieb' && builtYear) {
+      builtByYear[builtYear] = (builtByYear[builtYear] || 0) + val;
+    }
+    if (key !== 'stillgelegt') {
+      const effYear = builtYear || yearOf(p.GeplantesInbetriebnahmedatum);
+      if (effYear) pipelineByYear[effYear] = (pipelineByYear[effYear] || 0) + val;
+    }
+  });
+  const years = Object.keys(builtByYear).concat(Object.keys(pipelineByYear)).map(Number);
+  if (!years.length) return { labels: [], built: [], pipeline: [] };
+  const minY = Math.min(...years), maxY = Math.max(...years);
+  const labels = [], built = [], pipeline = [];
+  let cumBuilt = 0, cumPipeline = 0;
+  for (let y = minY; y <= maxY; y++) {
+    cumBuilt += builtByYear[y] || 0;
+    cumPipeline += pipelineByYear[y] || 0;
+    labels.push(y);
+    built.push(Math.round(cumBuilt * 10) / 10);
+    pipeline.push(Math.round((cumBuilt + cumPipeline) * 10) / 10);
+  }
+  return { labels, built, pipeline };
+}
+function yearOf(dateStr) {
+  if (!dateStr) return null;
+  const y = parseInt(dateStr.slice(0, 4), 10);
+  return (y >= CHART_MIN_YEAR && y <= 2035) ? y : null;
+}
+
+function makeChart(canvasId, series, unitLabel) {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: series.labels,
+      datasets: [
+        { label: 'Realisiert (In Betrieb)', data: series.built, borderColor: '#0f5c73', backgroundColor: 'rgba(15,92,115,0.08)', fill: true, tension: 0.15, pointRadius: 2 },
+        { label: 'inkl. Pipeline (Planung/Genehmigt)', data: series.pipeline, borderColor: '#f9a825', borderDash: [4, 3], fill: false, tension: 0.15, pointRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        y: { title: { display: true, text: unitLabel, font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        x: { ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function drawCharts(filtered) {
+  const mwSeries = buildCumulativeSeries(filtered, 'mw');
+  const mwhSeries = buildCumulativeSeries(filtered, 'mwh');
+  if (chartMW) { chartMW.data.labels = mwSeries.labels; chartMW.data.datasets[0].data = mwSeries.built; chartMW.data.datasets[1].data = mwSeries.pipeline; chartMW.update(); }
+  else chartMW = makeChart('chartMW', mwSeries, 'MW (kumuliert)');
+  if (chartMWh) { chartMWh.data.labels = mwhSeries.labels; chartMWh.data.datasets[0].data = mwhSeries.built; chartMWh.data.datasets[1].data = mwhSeries.pipeline; chartMWh.update(); }
+  else chartMWh = makeChart('chartMWh', mwhSeries, 'MWh (kumuliert)');
+}
+
+// ---------- Germany highlight (mask + outline) ----------
+function addGermanyHighlight(geo) {
+  const worldRing = [[85, -170], [85, 170], [-85, 170], [-85, -170]];
+  const holes = [];
+  geo.features[0].geometry.coordinates.forEach(polygon => {
+    holes.push(polygon[0].map(([lng, lat]) => [lat, lng]));
+  });
+  L.polygon([worldRing, ...holes], {
+    stroke: false, fillColor: '#0b1f27', fillOpacity: 0.35, interactive: false,
+  }).addTo(map);
+  L.geoJSON(geo, { style: { color: '#0f5c73', weight: 2, fill: false }, interactive: false }).addTo(map);
+  map.fitBounds(L.geoJSON(geo).getBounds(), { padding: [10, 10] });
+}
+
+// ---------- Bundesland layer ----------
+function addBundeslaenderLayer(geo) {
+  const select = document.getElementById('bundeslandSelect');
+  geo.features
+    .map(f => f.properties.name)
+    .sort((a, b) => a.localeCompare(b, 'de'))
+    .forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      select.appendChild(opt);
+    });
+  select.addEventListener('change', e => { state.bundesland = e.target.value; refresh(); });
+
+  bundeslaenderLayer = L.geoJSON(geo, {
+    style: () => ({ color: '#8a97a6', weight: 1, fill: false }),
+    interactive: false,
+  }).addTo(map);
+}
+
+function highlightBundesland() {
+  if (!bundeslaenderLayer) return;
+  bundeslaenderLayer.eachLayer(lyr => {
+    const active = state.bundesland !== 'Alle' && lyr.feature.properties.name === state.bundesland;
+    lyr.setStyle(active
+      ? { color: '#f9a825', weight: 3, fill: true, fillColor: '#f9a825', fillOpacity: 0.08 }
+      : { color: '#8a97a6', weight: 1, fill: false });
+  });
+}
+
+// ---------- Load everything ----------
+Promise.all([
+  fetch('data/bess_de.geojson').then(r => r.json()),
+  fetch('data/geo/deutschland.geo.json').then(r => r.json()),
+  fetch('data/geo/bundeslaender.geo.json').then(r => r.json()),
+]).then(([bess, germany, laender]) => {
+  allFeatures = bess.features.map(f => {
+    f._mw = parseFloat(f.properties.Bruttoleistung || 0) / 1000;
+    const cap = f.properties.NutzbareSpeicherkapazitaet_kWh;
+    f._mwh = cap ? parseFloat(cap) / 1000 : null;
+    return f;
+  });
+  addGermanyHighlight(germany);
+  addBundeslaenderLayer(laender);
+  refresh();
+}).catch(err => {
+  console.error(err);
+  document.getElementById('statCount').textContent = 'Fehler';
+});
 </script>
 </body>
 </html>
