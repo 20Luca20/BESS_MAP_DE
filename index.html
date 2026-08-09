@@ -146,7 +146,7 @@
   table.site-table tbody td { padding: 7px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   table.site-table tbody tr { cursor: pointer; }
   table.site-table tbody tr:hover { background: #F5F5F7; }
-  table.site-table .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .table-empty { padding: 24px 12px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
 
   .legend { background: var(--panel-solid); padding: 10px 13px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); font-size: 12.5px; line-height: 1.75; border: 1px solid var(--border); }
@@ -208,6 +208,15 @@
           <button data-cat="utility" class="active"><span data-i18n="catUtility">Utility-Scale</span><br><small data-i18n="catUtilitySub">&ge; 1 MW</small></button>
           <button data-cat="klein"><span data-i18n="catKlein">Klein / C&amp;I</span><br><small data-i18n="catKleinSub">&lt; 1 MW</small></button>
           <button data-cat="alle"><span data-i18n="catAlle">Alle</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="statusFilterLabel">Status</h2>
+        <div class="bucket-list" id="statusList"></div>
+        <div class="bucket-actions">
+          <a id="statusAll" data-i18n="bucketAllLink">Alle</a>
+          <a id="statusNone" data-i18n="bucketNoneLink">Keine</a>
         </div>
       </div>
 
@@ -296,6 +305,7 @@ const I18N = {
     catUtility: 'Utility-Scale', catUtilitySub: '≥ 1 MW',
     catKlein: 'Klein / C&I', catKleinSub: '< 1 MW',
     catAlle: 'Alle',
+    statusFilterLabel: 'Status',
     bucketLabel: 'Grössenklasse (Utility-Scale)', bucketAllLink: 'Alle', bucketNoneLink: 'Keine',
     bundeslandLabel: 'Bundesland', bundeslandAll: 'Alle Bundesländer',
     resetFiltersLabel: 'Alle Filter zurücksetzen',
@@ -324,6 +334,7 @@ const I18N = {
     catUtility: 'Utility-Scale', catUtilitySub: '≥ 1 MW',
     catKlein: 'Small / C&I', catKleinSub: '< 1 MW',
     catAlle: 'All',
+    statusFilterLabel: 'Status',
     bucketLabel: 'Size class (utility-scale)', bucketAllLink: 'All', bucketNoneLink: 'None',
     bundeslandLabel: 'State', bundeslandAll: 'All states',
     resetFiltersLabel: 'Reset all filters',
@@ -354,11 +365,9 @@ const BUNDESLAND_EN = {
 };
 function t(key) { return I18N[state.lang][key] || key; }
 function trBundesland(name) { return state.lang === 'en' ? (BUNDESLAND_EN[name] || name) : name; }
-function trStatus(status) {
-  const key = statusKey(status);
-  const map = { betrieb: 'statusBetrieb', genehmigt: 'statusGenehmigt', planung: 'statusPlanung', stillgelegt: 'statusStillgelegt', sonst: 'statusSonst' };
-  return t(map[key]);
-}
+const STATUS_LABEL_KEYS = { betrieb: 'statusBetrieb', genehmigt: 'statusGenehmigt', planung: 'statusPlanung', stillgelegt: 'statusStillgelegt', sonst: 'statusSonst' };
+function trStatusKey(key) { return t(STATUS_LABEL_KEYS[key]); }
+function trStatus(status) { return trStatusKey(statusKey(status)); }
 function applyStaticText() {
   document.documentElement.lang = state.lang;
   document.getElementById('pageTitle').textContent = t('pageTitle');
@@ -405,6 +414,7 @@ function bucketFor(mw) { const b = BUCKETS.find(b => b.test(mw)); return b ? b.k
 // ============================================================
 const state = {
   search: '', category: 'utility', buckets: new Set(BUCKETS.map(b => b.key)),
+  statuses: new Set(STATUS_ORDER),
   bundesland: 'Alle', lang: 'de', chartUnit: 'mw', paneTab: 'chart',
   sortKey: 'mw', sortDir: 'desc',
   chartGranularity: 'year', rangeFrom: null, rangeTo: null,
@@ -428,10 +438,7 @@ function renderLegend() {
   const div = document.getElementById('mapLegend');
   if (!div) return;
   div.innerHTML = `<b>${t('legendTitle')}</b><br>` +
-    ['betrieb', 'genehmigt', 'planung', 'stillgelegt', 'sonst'].map(k =>
-      `<span class="dot" style="background:${STATUS_COLORS[k]}"></span>${trStatus(
-        { betrieb: 'In Betrieb', genehmigt: 'Genehmigt', planung: 'In Planung', stillgelegt: 'Stillgelegt', sonst: '' }[k]
-      )}<br>`).join('');
+    STATUS_ORDER.map(k => `<span class="dot" style="background:${STATUS_COLORS[k]}"></span>${trStatusKey(k)}<br>`).join('');
 }
 
 // ============================================================
@@ -463,6 +470,36 @@ document.getElementById('bucketAll').addEventListener('click', () => {
 document.getElementById('bucketNone').addEventListener('click', () => {
   state.buckets = new Set();
   bucketListEl.querySelectorAll('input').forEach(cb => cb.checked = false);
+  refresh();
+});
+
+// ============================================================
+// Status checkboxes
+// ============================================================
+const statusListEl = document.getElementById('statusList');
+STATUS_ORDER.forEach(key => {
+  const label = document.createElement('label');
+  label.innerHTML = `<input type="checkbox" checked> <span class="status-dot" style="background:${STATUS_COLORS[key]}"></span><span class="status-filter-label"></span>`;
+  label.dataset.statusKey = key;
+  statusListEl.appendChild(label);
+  label.querySelector('input').addEventListener('change', e => {
+    if (e.target.checked) state.statuses.add(key); else state.statuses.delete(key);
+    refresh();
+  });
+});
+function renderStatusLabels() {
+  statusListEl.querySelectorAll('label').forEach(label => {
+    label.querySelector('.status-filter-label').textContent = trStatusKey(label.dataset.statusKey);
+  });
+}
+document.getElementById('statusAll').addEventListener('click', () => {
+  state.statuses = new Set(STATUS_ORDER);
+  statusListEl.querySelectorAll('input').forEach(cb => cb.checked = true);
+  refresh();
+});
+document.getElementById('statusNone').addEventListener('click', () => {
+  state.statuses = new Set();
+  statusListEl.querySelectorAll('input').forEach(cb => cb.checked = false);
   refresh();
 });
 
@@ -552,10 +589,12 @@ document.getElementById('searchInput').addEventListener('input', e => { state.se
 document.getElementById('resetFilters').addEventListener('click', () => {
   state.search = ''; state.category = 'utility'; state.bundesland = 'Alle';
   state.buckets = new Set(BUCKETS.map(b => b.key));
+  state.statuses = new Set(STATUS_ORDER);
   document.getElementById('searchInput').value = '';
   document.getElementById('bundeslandSelect').value = 'Alle';
   bucketListEl.querySelectorAll('input').forEach(cb => cb.checked = true);
   bucketListEl.classList.remove('disabled');
+  statusListEl.querySelectorAll('input').forEach(cb => cb.checked = true);
   document.querySelectorAll('#categorySeg button').forEach(b => b.classList.toggle('active', b.dataset.cat === 'utility'));
   refresh();
 });
@@ -571,6 +610,7 @@ document.getElementById('langToggle').addEventListener('click', e => {
   document.querySelectorAll('#langToggle button').forEach(b => b.classList.toggle('active', b === btn));
   applyStaticText();
   renderBucketLabels();
+  renderStatusLabels();
   renderLegend();
   refresh();
 });
@@ -612,6 +652,7 @@ function matchesFilters(f) {
   if (state.category === 'utility' && mw < UTILITY_THRESHOLD_MW) return false;
   if (state.category === 'klein' && mw >= UTILITY_THRESHOLD_MW) return false;
   if (state.category === 'utility' && !state.buckets.has(bucketFor(mw))) return false;
+  if (!state.statuses.has(statusKey(p.EinheitBetriebsstatus))) return false;
   if (state.bundesland !== 'Alle' && p.Bundesland !== state.bundesland) return false;
   if (state.search) {
     const hay = [p.NameStromerzeugungseinheit, p.Ort, p.Landkreis, p.EinheitMastrNummer].filter(Boolean).join(' ').toLowerCase();
@@ -963,6 +1004,7 @@ Promise.all([
   addBundeslaenderLayer(laender);
   applyStaticText();
   renderBucketLabels();
+  renderStatusLabels();
   renderLegend();
   renderSortArrows();
   refresh();
