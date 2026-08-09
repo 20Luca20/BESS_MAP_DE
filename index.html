@@ -192,7 +192,7 @@
     <div class="stat-card"><div class="val green" id="statMW">–</div><div class="lbl" data-i18n="statMWLabel">MW installiert</div></div>
     <div class="stat-card"><div class="val blue" id="statMWh">–</div><div class="lbl" data-i18n="statMWhLabel">MWh installiert</div></div>
     <div class="stat-card"><div class="val orange" id="statPlanned">–</div><div class="lbl" data-i18n="statPlannedLabel">MW in Planung</div></div>
-    <div class="stat-card"><div class="val" id="statDuration">–</div><div class="lbl" data-i18n="statDurationLabel">Ø Speicherdauer (h)</div></div>
+    <div class="stat-card" id="statDurationCard"><div class="val" id="statDuration">–</div><div class="lbl" data-i18n="statDurationLabel">Ø Speicherdauer (h)</div></div>
   </div>
 
   <div id="body">
@@ -301,11 +301,12 @@ const I18N = {
     resetFiltersLabel: 'Alle Filter zurücksetzen',
     statCountLabel: 'Standorte', statMWLabel: 'MW installiert', statMWhLabel: 'MWh installiert', statPlannedLabel: 'MW in Planung',
     statDurationLabel: 'Ø Speicherdauer (h)',
+    statDurationTooltip: 'Bezieht sich auf den im Verlauf-Chart gewählten Zeitraum (Von/Bis) – anders als die übrigen Kennzahlen oben.',
     unitBoth: 'Beide', granYear: 'Jährlich', granMonth: 'Monatlich',
     chartTitle: 'Verlauf',
     chartRealized: 'Realisiert',
     chartPipeline: 'inkl. Pipeline',
-    chartFootnote: '<b>Realisiert</b> zeigt nur Anlagen mit MaStR-Status "In Betrieb", kumuliert nach ihrem tatsächlichen Inbetriebnahmedatum – die Linie endet im aktuellen Jahr, da keine Anlage in der Zukunft bereits in Betrieb sein kann. <b>Inkl. Pipeline</b> addiert zusätzlich Anlagen mit Status "In Planung" oder "Genehmigt", hochgerechnet auf ihr geplantes bzw. zuletzt bekanntes Datum, und zeigt so die erwartete Gesamtkapazität. Datenpunkte vor 2010 gelten als unplausible MaStR-Platzhalterdaten und werden ausgeschlossen.',
+    chartFootnote: '<b>Realisiert</b> zeigt nur Anlagen mit MaStR-Status "In Betrieb", kumuliert nach ihrem tatsächlichen Inbetriebnahmedatum – die Linie endet im aktuellen Jahr, da keine Anlage in der Zukunft bereits in Betrieb sein kann.<br><b>Inkl. Pipeline</b> addiert zusätzlich Anlagen mit Status "In Planung" oder "Genehmigt", hochgerechnet auf ihr geplantes bzw. zuletzt bekanntes Datum, und zeigt so die erwartete Gesamtkapazität.',
     legendTitle: 'Status',
     statusBetrieb: 'In Betrieb', statusGenehmigt: 'Genehmigt', statusPlanung: 'In Planung', statusStillgelegt: 'Stillgelegt', statusSonst: 'Sonstiges',
     popupStatus: 'Status', popupPower: 'Leistung', popupCapacity: 'Kapazität', popupCommission: 'Inbetriebnahme', popupPlannedPrefix: 'geplant',
@@ -328,11 +329,12 @@ const I18N = {
     resetFiltersLabel: 'Reset all filters',
     statCountLabel: 'Sites', statMWLabel: 'MW installed', statMWhLabel: 'MWh installed', statPlannedLabel: 'MW planned',
     statDurationLabel: 'Avg. duration (h)',
+    statDurationTooltip: 'Reflects the Von/Bis (from/to) range selected in the Timeline chart — unlike the other KPIs above.',
     unitBoth: 'Both', granYear: 'Yearly', granMonth: 'Monthly',
     chartTitle: 'Timeline',
     chartRealized: 'Realized',
     chartPipeline: 'Incl. pipeline',
-    chartFootnote: '<b>Realized</b> includes only units with MaStR status "in operation", cumulated by their actual commissioning date – the line stops at the current year, since no unit can be operating in the future. <b>Incl. pipeline</b> additionally adds units with status "planned" or "approved", projected on their planned (or last known) date, showing the full expected capacity. Data points before 2010 are treated as implausible MaStR placeholder dates and excluded.',
+    chartFootnote: '<b>Realized</b> includes only units with MaStR status "in operation", cumulated by their actual commissioning date – the line stops at the current year, since no unit can be operating in the future.<br><b>Incl. pipeline</b> additionally adds units with status "planned" or "approved", projected on their planned (or last known) date, showing the full expected capacity.',
     legendTitle: 'Status',
     statusBetrieb: 'In Operation', statusGenehmigt: 'Approved', statusPlanung: 'In Planning', statusStillgelegt: 'Decommissioned', statusSonst: 'Other',
     popupStatus: 'Status', popupPower: 'Power', popupCapacity: 'Capacity', popupCommission: 'Commissioned', popupPlannedPrefix: 'planned',
@@ -643,10 +645,19 @@ function popupHtml(feature) {
     <small>MaStR: ${p.EinheitMastrNummer || ''}</small>
   `;
 }
+// Draw order for overlapping markers, least- to most-important on top:
+// unknown/other, decommissioned, planned, approved, then operating last so
+// it's never hidden behind an overlapping older/inactive site. Same-status
+// ties broken by power so the larger site of the pair stays visible.
+const MARKER_DRAW_ORDER = ['sonst', 'stillgelegt', 'planung', 'genehmigt', 'betrieb'];
 function drawMarkers(filtered) {
   if (markerLayer) map.removeLayer(markerLayer);
   markersByMastrNr = {};
-  markerLayer = L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
+  const sorted = filtered.slice().sort((a, b) => {
+    const byStatus = MARKER_DRAW_ORDER.indexOf(statusKey(a.properties.EinheitBetriebsstatus)) - MARKER_DRAW_ORDER.indexOf(statusKey(b.properties.EinheitBetriebsstatus));
+    return byStatus !== 0 ? byStatus : a._mw - b._mw;
+  });
+  markerLayer = L.geoJSON({ type: 'FeatureCollection', features: sorted }, {
     pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
       radius: radiusForPower(feature._mw), fillColor: STATUS_COLORS[statusKey(feature.properties.EinheitBetriebsstatus)],
       color: 'rgba(0,0,0,0.35)', weight: 1, fillOpacity: 0.85,
@@ -674,10 +685,27 @@ function drawStats(filtered) {
   document.getElementById('statMW').textContent = mw.toLocaleString(loc, { maximumFractionDigits: 0 });
   document.getElementById('statMWh').textContent = mwh.toLocaleString(loc, { maximumFractionDigits: 0 });
   document.getElementById('statPlanned').textContent = plannedMW.toLocaleString(loc, { maximumFractionDigits: 0 });
-  // Weighted (total MWh / total MW), not a simple per-site average -- sites
-  // with unknown capacity would otherwise unfairly drag a simple mean down.
+}
+// Ø Speicherdauer is scoped to the chart's selected Von/Bis time range (not
+// the full filtered set like the other KPIs), per user request -- so it
+// stays consistent with whatever period the chart is currently showing.
+// Weighted (total MWh / total MW) among "In Betrieb" sites in range, not a
+// simple per-site average -- sites with unknown capacity would otherwise
+// unfairly drag a simple mean down.
+function updateDurationStat(filtered) {
+  let mw = 0, mwh = 0;
+  filtered.forEach(f => {
+    if (statusKey(f.properties.EinheitBetriebsstatus) !== 'betrieb') return;
+    const period = periodOf(f.properties.Inbetriebnahmedatum, state.chartGranularity);
+    if (!period) return;
+    if (state.rangeFrom != null && period < state.rangeFrom) return;
+    if (state.rangeTo != null && period > state.rangeTo) return;
+    mw += f._mw; mwh += f._mwh || 0;
+  });
+  const loc = state.lang === 'en' ? 'en-US' : 'de-DE';
   const avgDuration = mw > 0 ? mwh / mw : null;
   document.getElementById('statDuration').textContent = avgDuration != null ? avgDuration.toLocaleString(loc, { maximumFractionDigits: 1 }) : '–';
+  document.getElementById('statDurationCard').title = t('statDurationTooltip');
 }
 
 // ============================================================
@@ -861,6 +889,7 @@ function renderChart() {
   const view = sliceToRange(lastFullSeries);
   if (chart) { chart.destroy(); chart = null; }
   chart = buildChart(view);
+  updateDurationStat(allFeatures.filter(matchesFilters));
 }
 function drawCharts(filtered) {
   lastFullSeries = computeSeries(filtered);
