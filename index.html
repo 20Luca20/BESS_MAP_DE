@@ -119,14 +119,18 @@
   #map { flex: 1 1 auto; min-width: 200px; }
 
   #graphPane {
-    width: 420px; min-width: 300px; max-width: 640px; flex: 0 0 auto;
+    width: 420px; min-width: 300px; max-width: 1200px; flex: 0 0 auto;
     background: var(--panel-solid); border-left: 1px solid var(--border);
     padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
   }
   #graphPane .graph-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   #graphPane h2 { font-size: 13px; font-weight: 700; margin: 0; }
-  .chart-wrap { position: relative; height: 320px; }
-  .chart-legend-note { font-size: 11px; color: var(--text-muted); line-height: 1.6; background: #F5F5F7; border-radius: 10px; padding: 10px 12px; }
+  #chartView { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 10px; }
+  .chart-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .range-controls { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-muted); }
+  .range-controls select { width: auto; padding: 5px 8px; font-size: 11.5px; border-radius: 8px; }
+  .chart-wrap { position: relative; flex: 1; min-height: 220px; }
+  .chart-legend-note { font-size: 11px; color: var(--text-muted); line-height: 1.6; background: #F5F5F7; border-radius: 10px; padding: 10px 12px; flex: 0 0 auto; }
   .chart-legend-note b { color: var(--text); }
 
   .table-view { flex-direction: column; flex: 1; min-height: 0; } /* display itself is toggled inline by JS */
@@ -188,6 +192,7 @@
     <div class="stat-card"><div class="val green" id="statMW">–</div><div class="lbl" data-i18n="statMWLabel">MW installiert</div></div>
     <div class="stat-card"><div class="val blue" id="statMWh">–</div><div class="lbl" data-i18n="statMWhLabel">MWh installiert</div></div>
     <div class="stat-card"><div class="val orange" id="statPlanned">–</div><div class="lbl" data-i18n="statPlannedLabel">MW in Planung</div></div>
+    <div class="stat-card"><div class="val" id="statDuration">–</div><div class="lbl" data-i18n="statDurationLabel">Ø Speicherdauer (h)</div></div>
   </div>
 
   <div id="body">
@@ -235,13 +240,25 @@
           <button data-tab="chart" class="active" data-i18n="tabChart">Verlauf</button>
           <button data-tab="table" data-i18n="tabTable">Liste</button>
         </div>
-        <div class="segmented" id="unitSeg" style="width: 140px;">
+        <div class="segmented" id="unitSeg" style="width: 190px;">
           <button data-unit="mw" class="active">MW</button>
           <button data-unit="mwh">MWh</button>
+          <button data-unit="both" data-i18n="unitBoth">Beide</button>
         </div>
       </div>
 
       <div id="chartView">
+        <div class="chart-controls" id="chartControls">
+          <div class="segmented" id="granularitySeg" style="width: 160px;">
+            <button data-gran="year" class="active" data-i18n="granYear">Jährlich</button>
+            <button data-gran="month" data-i18n="granMonth">Monatlich</button>
+          </div>
+          <div class="range-controls">
+            <select id="rangeFrom"></select>
+            <span>–</span>
+            <select id="rangeTo"></select>
+          </div>
+        </div>
         <div class="chart-wrap"><canvas id="chart"></canvas></div>
         <div class="chart-legend-note" id="chartFootnote"></div>
       </div>
@@ -283,9 +300,11 @@ const I18N = {
     bundeslandLabel: 'Bundesland', bundeslandAll: 'Alle Bundesländer',
     resetFiltersLabel: 'Alle Filter zurücksetzen',
     statCountLabel: 'Standorte', statMWLabel: 'MW installiert', statMWhLabel: 'MWh installiert', statPlannedLabel: 'MW in Planung',
+    statDurationLabel: 'Ø Speicherdauer (h)',
+    unitBoth: 'Beide', granYear: 'Jährlich', granMonth: 'Monatlich',
     chartTitle: 'Verlauf',
-    chartRealized: 'Realisiert (In Betrieb, bis heute)',
-    chartPipeline: 'inkl. Pipeline (Planung/Genehmigt)',
+    chartRealized: 'Realisiert',
+    chartPipeline: 'inkl. Pipeline',
     chartFootnote: '<b>Realisiert</b> zeigt nur Anlagen mit MaStR-Status "In Betrieb", kumuliert nach ihrem tatsächlichen Inbetriebnahmedatum – die Linie endet im aktuellen Jahr, da keine Anlage in der Zukunft bereits in Betrieb sein kann. <b>Inkl. Pipeline</b> addiert zusätzlich Anlagen mit Status "In Planung" oder "Genehmigt", hochgerechnet auf ihr geplantes bzw. zuletzt bekanntes Datum, und zeigt so die erwartete Gesamtkapazität. Datenpunkte vor 2010 gelten als unplausible MaStR-Platzhalterdaten und werden ausgeschlossen.',
     legendTitle: 'Status',
     statusBetrieb: 'In Betrieb', statusGenehmigt: 'Genehmigt', statusPlanung: 'In Planung', statusStillgelegt: 'Stillgelegt', statusSonst: 'Sonstiges',
@@ -308,9 +327,11 @@ const I18N = {
     bundeslandLabel: 'State', bundeslandAll: 'All states',
     resetFiltersLabel: 'Reset all filters',
     statCountLabel: 'Sites', statMWLabel: 'MW installed', statMWhLabel: 'MWh installed', statPlannedLabel: 'MW planned',
+    statDurationLabel: 'Avg. duration (h)',
+    unitBoth: 'Both', granYear: 'Yearly', granMonth: 'Monthly',
     chartTitle: 'Timeline',
-    chartRealized: 'Realized (in operation, to date)',
-    chartPipeline: 'incl. pipeline (planned/approved)',
+    chartRealized: 'Realized',
+    chartPipeline: 'Incl. pipeline',
     chartFootnote: '<b>Realized</b> includes only units with MaStR status "in operation", cumulated by their actual commissioning date – the line stops at the current year, since no unit can be operating in the future. <b>Incl. pipeline</b> additionally adds units with status "planned" or "approved", projected on their planned (or last known) date, showing the full expected capacity. Data points before 2010 are treated as implausible MaStR placeholder dates and excluded.',
     legendTitle: 'Status',
     statusBetrieb: 'In Operation', statusGenehmigt: 'Approved', statusPlanung: 'In Planning', statusStillgelegt: 'Decommissioned', statusSonst: 'Other',
@@ -384,9 +405,10 @@ const state = {
   search: '', category: 'utility', buckets: new Set(BUCKETS.map(b => b.key)),
   bundesland: 'Alle', lang: 'de', chartUnit: 'mw', paneTab: 'chart',
   sortKey: 'mw', sortDir: 'desc',
+  chartGranularity: 'year', rangeFrom: null, rangeTo: null,
 };
 let allFeatures = [], markerLayer = null, bundeslaenderLayer = null, chart = null;
-let lastMwSeries = null, lastMwhSeries = null;
+let lastFullSeries = null; // { labels, mwBuilt, mwPipeline, mwhBuilt, mwhPipeline }
 let markersByMastrNr = {};
 
 // ============================================================
@@ -462,8 +484,24 @@ document.getElementById('unitSeg').addEventListener('click', e => {
   if (!btn) return;
   state.chartUnit = btn.dataset.unit;
   document.querySelectorAll('#unitSeg button').forEach(b => b.classList.toggle('active', b === btn));
-  applyChartUnit();
+  renderChart();
 });
+
+// ============================================================
+// Chart granularity + time-range controls
+// ============================================================
+document.getElementById('granularitySeg').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  state.chartGranularity = btn.dataset.gran;
+  document.querySelectorAll('#granularitySeg button').forEach(b => b.classList.toggle('active', b === btn));
+  // Range depends on period format (year vs year-month) -- reset it and let
+  // rebuildRangeOptions (inside renderChart -> drawCharts path) repopulate.
+  state.rangeFrom = null; state.rangeTo = null;
+  drawCharts(allFeatures.filter(matchesFilters));
+});
+document.getElementById('rangeFrom').addEventListener('change', e => { state.rangeFrom = e.target.value; renderChart(); });
+document.getElementById('rangeTo').addEventListener('change', e => { state.rangeTo = e.target.value; renderChart(); });
 
 // ============================================================
 // Chart / Table pane tab toggle
@@ -562,7 +600,7 @@ function makeResizable(handleEl, targetEl, { min, max, reverse }) {
   });
 }
 makeResizable(document.getElementById('divider1'), document.getElementById('sidebar'), { min: 260, max: 520, reverse: false });
-makeResizable(document.getElementById('divider2'), document.getElementById('graphPane'), { min: 300, max: 640, reverse: true });
+makeResizable(document.getElementById('divider2'), document.getElementById('graphPane'), { min: 300, max: 1200, reverse: true });
 
 // ============================================================
 // Filtering
@@ -636,6 +674,10 @@ function drawStats(filtered) {
   document.getElementById('statMW').textContent = mw.toLocaleString(loc, { maximumFractionDigits: 0 });
   document.getElementById('statMWh').textContent = mwh.toLocaleString(loc, { maximumFractionDigits: 0 });
   document.getElementById('statPlanned').textContent = plannedMW.toLocaleString(loc, { maximumFractionDigits: 0 });
+  // Weighted (total MWh / total MW), not a simple per-site average -- sites
+  // with unknown capacity would otherwise unfairly drag a simple mean down.
+  const avgDuration = mw > 0 ? mwh / mw : null;
+  document.getElementById('statDuration').textContent = avgDuration != null ? avgDuration.toLocaleString(loc, { maximumFractionDigits: 1 }) : '–';
 }
 
 // ============================================================
@@ -689,79 +731,140 @@ document.getElementById('siteTableBody').addEventListener('click', e => {
 // ============================================================
 // Charts
 // ============================================================
-function yearOf(dateStr) {
+// Period helpers: a "period" is a sortable string, 'YYYY' (year granularity)
+// or 'YYYY-MM' (month granularity) -- both compare correctly with plain
+// string comparison since they're zero-padded and share the same format.
+function periodOf(dateStr, granularity) {
   if (!dateStr) return null;
   const y = parseInt(dateStr.slice(0, 4), 10);
-  return (y >= CHART_MIN_YEAR && y <= 2035) ? y : null;
+  if (!(y >= CHART_MIN_YEAR && y <= 2035)) return null;
+  if (granularity === 'month') {
+    const m = dateStr.slice(5, 7);
+    if (m.length !== 2 || m === '00') return null;
+    return `${dateStr.slice(0, 4)}-${m}`;
+  }
+  return String(y);
 }
-function buildCumulativeSeries(filtered, valueKey) {
-  const builtByYear = {}, pipelineByYear = {};
+function nextPeriod(p, granularity) {
+  if (granularity === 'year') return String(Number(p) + 1);
+  const [y, m] = p.split('-').map(Number);
+  return m >= 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+function currentPeriod(granularity) {
+  const now = new Date();
+  return granularity === 'year' ? String(now.getFullYear()) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+function computeSeries(filtered) {
+  const granularity = state.chartGranularity;
+  const builtMwByP = {}, pipeMwByP = {}, builtMwhByP = {}, pipeMwhByP = {};
   filtered.forEach(f => {
     const p = f.properties;
     const key = statusKey(p.EinheitBetriebsstatus);
-    const val = valueKey === 'mw' ? f._mw : (f._mwh || 0);
-    const builtYear = yearOf(p.Inbetriebnahmedatum);
-    if (key === 'betrieb' && builtYear) builtByYear[builtYear] = (builtByYear[builtYear] || 0) + val;
+    const builtPeriod = periodOf(p.Inbetriebnahmedatum, granularity);
+    if (key === 'betrieb' && builtPeriod) {
+      builtMwByP[builtPeriod] = (builtMwByP[builtPeriod] || 0) + f._mw;
+      builtMwhByP[builtPeriod] = (builtMwhByP[builtPeriod] || 0) + (f._mwh || 0);
+    }
     if (key !== 'stillgelegt') {
-      const effYear = builtYear || yearOf(p.GeplantesInbetriebnahmedatum);
-      if (effYear) pipelineByYear[effYear] = (pipelineByYear[effYear] || 0) + val;
+      const effPeriod = builtPeriod || periodOf(p.GeplantesInbetriebnahmedatum, granularity);
+      if (effPeriod) {
+        pipeMwByP[effPeriod] = (pipeMwByP[effPeriod] || 0) + f._mw;
+        pipeMwhByP[effPeriod] = (pipeMwhByP[effPeriod] || 0) + (f._mwh || 0);
+      }
     }
   });
-  const years = Object.keys(builtByYear).concat(Object.keys(pipelineByYear)).map(Number);
-  if (!years.length) return { labels: [], built: [], pipeline: [] };
-  const minY = Math.min(...years), maxY = Math.max(...years, CURRENT_YEAR);
-  const labels = [], built = [], pipeline = [];
-  let cumBuilt = 0, cumPipeline = 0;
-  for (let y = minY; y <= maxY; y++) {
-    cumBuilt += builtByYear[y] || 0;
-    cumPipeline += pipelineByYear[y] || 0;
-    labels.push(y);
-    // "Realized" must never show a value beyond the current year -- a unit
+  const periods = Object.keys(builtMwByP).concat(Object.keys(pipeMwByP));
+  const now = currentPeriod(granularity);
+  if (!periods.length) return { labels: [], mwBuilt: [], mwPipeline: [], mwhBuilt: [], mwhPipeline: [], nowIndex: -1 };
+  let minP = periods.reduce((a, b) => a < b ? a : b);
+  let maxP = periods.reduce((a, b) => a > b ? a : b);
+  if (now > maxP) maxP = now;
+  const labels = [], mwBuilt = [], mwPipeline = [], mwhBuilt = [], mwhPipeline = [];
+  let cumMwBuilt = 0, cumMwPipe = 0, cumMwhBuilt = 0, cumMwhPipe = 0;
+  let nowIndex = -1;
+  for (let p = minP; ; p = nextPeriod(p, granularity)) {
+    cumMwBuilt += builtMwByP[p] || 0;
+    cumMwhBuilt += builtMwhByP[p] || 0;
+    cumMwPipe += pipeMwByP[p] || 0;
+    cumMwhPipe += pipeMwhByP[p] || 0;
+    labels.push(p);
+    if (p === now) nowIndex = labels.length - 1;
+    // "Realized" must never show a value beyond the current period -- a unit
     // cannot be "in operation" in the future. The line simply stops (null
     // creates a gap); "incl. pipeline" continues to project forward.
-    built.push(y <= CURRENT_YEAR ? Math.round(cumBuilt * 10) / 10 : null);
-    pipeline.push(Math.round((cumBuilt + cumPipeline) * 10) / 10);
+    const notFuture = p <= now;
+    mwBuilt.push(notFuture ? Math.round(cumMwBuilt * 10) / 10 : null);
+    mwhBuilt.push(notFuture ? Math.round(cumMwhBuilt * 10) / 10 : null);
+    mwPipeline.push(Math.round((cumMwBuilt + cumMwPipe) * 10) / 10);
+    mwhPipeline.push(Math.round((cumMwhBuilt + cumMwhPipe) * 10) / 10);
+    if (p === maxP) break;
   }
-  return { labels, built, pipeline };
+  return { labels, mwBuilt, mwPipeline, mwhBuilt, mwhPipeline, nowIndex };
 }
-function makeChart(series, unitLabel) {
+function rebuildRangeOptions(labels) {
+  const fromSel = document.getElementById('rangeFrom'), toSel = document.getElementById('rangeTo');
+  const prevFrom = state.rangeFrom, prevTo = state.rangeTo;
+  [fromSel, toSel].forEach(sel => { sel.innerHTML = ''; });
+  labels.forEach(p => {
+    fromSel.appendChild(new Option(p, p));
+    toSel.appendChild(new Option(p, p));
+  });
+  state.rangeFrom = labels.includes(prevFrom) ? prevFrom : labels[0];
+  state.rangeTo = labels.includes(prevTo) ? prevTo : labels[labels.length - 1];
+  fromSel.value = state.rangeFrom;
+  toSel.value = state.rangeTo;
+}
+function sliceToRange(full) {
+  let fromIdx = full.labels.indexOf(state.rangeFrom);
+  let toIdx = full.labels.indexOf(state.rangeTo);
+  if (fromIdx === -1) fromIdx = 0;
+  if (toIdx === -1) toIdx = full.labels.length - 1;
+  if (fromIdx > toIdx) [fromIdx, toIdx] = [toIdx, fromIdx];
+  const cut = arr => arr.slice(fromIdx, toIdx + 1);
+  return {
+    labels: cut(full.labels), mwBuilt: cut(full.mwBuilt), mwPipeline: cut(full.mwPipeline),
+    mwhBuilt: cut(full.mwhBuilt), mwhPipeline: cut(full.mwhPipeline),
+  };
+}
+function buildChart(view) {
   const ctx = document.getElementById('chart').getContext('2d');
+  const mode = state.chartUnit;
+  const datasets = [];
+  if (mode === 'mw' || mode === 'both') {
+    datasets.push({ label: `${t('chartRealized')} (MW)`, data: view.mwBuilt, borderColor: '#34C759', backgroundColor: 'rgba(52,199,89,0.10)', fill: mode === 'mw', tension: 0.15, pointRadius: 2, spanGaps: false, yAxisID: 'y' });
+    datasets.push({ label: `${t('chartPipeline')} (MW)`, data: view.mwPipeline, borderColor: '#FF9500', borderDash: [5, 3], fill: false, tension: 0.15, pointRadius: 2, yAxisID: 'y' });
+  }
+  if (mode === 'mwh' || mode === 'both') {
+    datasets.push({ label: `${t('chartRealized')} (MWh)`, data: view.mwhBuilt, borderColor: '#007AFF', backgroundColor: 'rgba(0,122,255,0.08)', fill: mode === 'mwh', tension: 0.15, pointRadius: 2, spanGaps: false, yAxisID: mode === 'both' ? 'y1' : 'y' });
+    datasets.push({ label: `${t('chartPipeline')} (MWh)`, data: view.mwhPipeline, borderColor: '#5AC8FA', borderDash: [5, 3], fill: false, tension: 0.15, pointRadius: 2, yAxisID: mode === 'both' ? 'y1' : 'y' });
+  }
+  const scales = {
+    x: { ticks: { font: { size: 11 }, maxRotation: 60, minRotation: state.chartGranularity === 'month' ? 60 : 0 } },
+    y: { position: 'left', title: { display: true, text: mode === 'mwh' ? 'MWh' : 'MW', font: { size: 11 } }, ticks: { font: { size: 11 } }, beginAtZero: true },
+  };
+  if (mode === 'both') {
+    scales.y1 = { position: 'right', title: { display: true, text: 'MWh', font: { size: 11 } }, ticks: { font: { size: 11 } }, beginAtZero: true, grid: { drawOnChartArea: false } };
+  }
   return new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: series.labels,
-      datasets: [
-        { label: t('chartRealized'), data: series.built, borderColor: '#34C759', backgroundColor: 'rgba(52,199,89,0.10)', fill: true, tension: 0.15, pointRadius: 2, spanGaps: false },
-        { label: t('chartPipeline'), data: series.pipeline, borderColor: '#FF9500', borderDash: [5, 3], fill: false, tension: 0.15, pointRadius: 2 },
-      ],
-    },
+    data: { labels: view.labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
-      scales: {
-        y: { title: { display: true, text: unitLabel, font: { size: 11 } }, ticks: { font: { size: 11 } }, beginAtZero: true },
-        x: { ticks: { font: { size: 11 } } },
-      },
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10.5 } } } },
+      scales,
     },
   });
 }
-function applyChartUnit() {
-  const series = state.chartUnit === 'mw' ? lastMwSeries : lastMwhSeries;
-  const unitLabel = state.chartUnit === 'mw' ? 'MW' : 'MWh';
-  if (!series) return;
-  if (!chart) { chart = makeChart(series, unitLabel); return; }
-  chart.data.labels = series.labels;
-  chart.data.datasets[0].data = series.built;
-  chart.data.datasets[0].label = t('chartRealized');
-  chart.data.datasets[1].data = series.pipeline;
-  chart.data.datasets[1].label = t('chartPipeline');
-  chart.options.scales.y.title.text = unitLabel;
-  chart.update();
+function renderChart() {
+  if (!lastFullSeries) return;
+  rebuildRangeOptions(lastFullSeries.labels);
+  const view = sliceToRange(lastFullSeries);
+  if (chart) { chart.destroy(); chart = null; }
+  chart = buildChart(view);
 }
 function drawCharts(filtered) {
-  lastMwSeries = buildCumulativeSeries(filtered, 'mw');
-  lastMwhSeries = buildCumulativeSeries(filtered, 'mwh');
-  applyChartUnit();
+  lastFullSeries = computeSeries(filtered);
+  renderChart();
 }
 
 // ============================================================
