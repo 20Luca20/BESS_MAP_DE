@@ -1,0 +1,9 @@
+# CHANGELOG – BESS_MAP_DE
+
+- 2026-08-09 — Installed Python 3.12 locally (winget) — needed for local pipeline prototyping/iteration; the weekly GitHub Action itself doesn't require it (Actions runners ship Python).
+- 2026-08-09 — Validated MaStR Gesamtdatenexport access pattern: single ~3.06GB daily ZIP, no per-object API; built `scripts/rangefile.py` (HTTP range-request seekable file + single-request member fetch) to pull only the Stromspeicher-related members (~650MB) instead of the full archive — `remotezip` package failed against this server for unknown reasons, replaced with a small dependency-free implementation.
+- 2026-08-09 — Validated join/filter design against real data: `EinheitenStromSpeicher` (unit-level, power/location/status, sharded into 28 files) joined to `AnlagenStromSpeicher` (Anlage-level, usable capacity in kWh) via `SpeMastrNummer` == `MaStRNummer`; status/tech codes resolved via `Katalogwerte.xml`. Filter `Batterietechnologie` present + `Bruttoleistung` >= 100 kW gives 98% coordinate coverage and correctly excludes residential batteries / pumped-hydro.
+- 2026-08-09 — Ran full pipeline: 2,668 BESS units matched filter, 2,631 mappable. Wrote `data/bess_de.csv` and `data/bess_de.geojson`.
+- 2026-08-09 — Built `index.html` (Leaflet map, OSM tiles, status-colored/power-sized markers, popup with power/capacity/dates) and `.github/workflows/update.yml` (weekly Monday 05:00 UTC pipeline run + auto-commit + Pages deploy).
+- 2026-08-09 — Removed exploratory one-off scripts (check_anlagen.py, check_bess_coords.py, check_coords.py, check_katalog.py, fetch_sample.py, inspect_shard.py) after consolidating their reusable logic into rangefile.py — kept repo to only what the pipeline needs.
+- 2026-08-09 — Initial commit pushed to github.com/20Luca20/BESS_MAP_DE (main branch).
